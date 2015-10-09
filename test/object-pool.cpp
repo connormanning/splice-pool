@@ -127,7 +127,28 @@ TEST(ObjectPool, AcquireStackFromEmpty)
     EXPECT_EQ(pool.available(), pool.allocated() - blockSize * 2);
 }
 
-TEST(ObjectPool, Reacquire)
+TEST(ObjectPool, AcquireStackFromPopulated)
 {
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::Stack<int> stack(pool.acquireStack(blockSize * 2));
+    pool.release(stack);
+
+    ASSERT_EQ(pool.allocated(), pool.available());
+    ASSERT_GE(pool.available(), blockSize * 2);
+
+    const std::size_t size(pool.available());
+    stack = pool.acquireStack(size - 1);
+
+    EXPECT_EQ(stack.size(), size - 1);
+    EXPECT_FALSE(stack.empty());
+    EXPECT_EQ(pool.available(), 1);
+    EXPECT_EQ(pool.allocated(), size);
+
+    pool.release(stack);
+
+    EXPECT_EQ(stack.size(), 0);
+    EXPECT_TRUE(stack.empty());
+    EXPECT_EQ(pool.available(), size);
+    EXPECT_EQ(pool.allocated(), size);
 }
 

@@ -271,15 +271,15 @@ public:
 
             if (count > other.size())
             {
-                const std::size_t nodesNeeded(count - other.size());
-                const std::size_t blocksNeeded(nodesNeeded / m_blockSize + 1);
+                const std::size_t numNodes(count - other.size());
+                const std::size_t numBlocks(numNodes / m_blockSize + 1);
 
-                Stack<T> alloc(doAllocate(blocksNeeded));
+                Stack<T> alloc(doAllocate(numBlocks));
 
                 m_allocated += alloc.size();
-                assert(alloc.size() == blocksNeeded * m_blockSize);
+                assert(alloc.size() == numBlocks * m_blockSize);
 
-                Stack<T> taken(alloc.popStack(nodesNeeded));
+                Stack<T> taken(alloc.popStack(numNodes));
                 other.push(taken);
 
                 lock.lock();
