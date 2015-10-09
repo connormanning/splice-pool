@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <deque>
 #include <iostream>
@@ -25,6 +26,12 @@ class Node
 public:
     Node(Node* next = nullptr) : m_val(), m_next(next) { }
 
+    template<class... Args>
+    void construct(Args&&... args)
+    {
+        new (&m_val) T(std::forward<Args>(args)...);
+    }
+
     T& val() { return m_val; }
     const T& val() const { return m_val; }
 
@@ -42,14 +49,17 @@ class Stack
     friend class SplicePool<T>;
 
 public:
-    Stack() : m_tail(nullptr), m_head(nullptr) { }
+    Stack() : m_tail(nullptr), m_head(nullptr), m_size(0) { }
 
     void push(Node<T>* node)
     {
+        assert(!m_tail || m_size);
+
         node->next(m_head);
         m_head = node;
 
-        if (!m_tail) m_tail = node;
+        if (!m_size) m_tail = node;
+        ++m_size;
     }
 
     void push(Stack& other)
@@ -58,6 +68,7 @@ public:
         {
             push(other.m_tail);
             m_head = other.head();
+            m_size += other.size() - 1; // Tail has already been accounted for.
             other.clear();
         }
     }
@@ -68,12 +79,42 @@ public:
         if (m_head)
         {
             m_head = m_head->next();
-            if (!m_head) m_tail = nullptr;
+            if (!--m_size) m_tail = nullptr;
         }
         return node;
     }
 
+    Stack popStack(std::size_t count)
+    {
+        Stack other;
+
+        if (count >= size())
+        {
+            other = *this;
+            clear();
+        }
+        else if (count)
+        {
+            assert(!empty());
+
+            Node<T>* tail(m_head);
+            for (std::size_t i(0); i < count - 1; ++i) tail = tail->next();
+
+            other.m_head = m_head;
+            m_head = tail->next();
+
+            tail->next(nullptr);
+            other.m_tail = tail;
+
+            other.m_size = count;
+            m_size -= count;
+        }
+
+        return other;
+    }
+
     bool empty() const { return !m_head; }
+    std::size_t size() const { return m_size; }
 
     void print(std::size_t maxElements) const
     {
@@ -87,7 +128,7 @@ public:
                 current = current->next();
             }
 
-            if (current) std::cout << "and more..." << std::endl;
+            if (current) std::cout << "and more...";
 
             std::cout << std::endl;
         }
@@ -99,10 +140,17 @@ public:
 
 private:
     Node<T>* head() { return m_head; }
-    void clear() { m_head = nullptr; }
+
+    void clear()
+    {
+        m_head = nullptr;
+        m_tail = nullptr;
+        m_size = 0;
+    }
 
     Node<T>* m_tail;
     Node<T>* m_head;
+    std::size_t m_size;
 };
 
 class TryLocker
@@ -185,7 +233,7 @@ public:
         {
             if (!std::is_pointer<T>::value)
             {
-                new (&node->val()) T(std::forward<Args>(args)...);
+                node->construct(std::forward<Args>(args)...);
             }
 
             return node;
@@ -197,10 +245,12 @@ public:
         }
     }
 
-    void print(std::size_t maxElements = 10) const
+    /*
+    Stack<T> acquireStack(std::size_t count)
     {
-        m_stack.print(maxElements);
+        // TODO
     }
+    */
 
 protected:
     void allocate()
@@ -209,8 +259,11 @@ protected:
 
         if (locker.tryLock())
         {
-            doAllocate();
+            Stack<T> newStack(doAllocate());
             m_count += m_blockSize;
+
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_stack.push(newStack);
         }
         else
         {
@@ -224,7 +277,7 @@ protected:
         construct(val);
     }
 
-    virtual void doAllocate() = 0;
+    virtual Stack<T> doAllocate() = 0;
     virtual void construct(T*) { }
     virtual void destruct(T*) { }
 
@@ -247,8 +300,10 @@ public:
     { }
 
 private:
-    virtual void doAllocate()
+    virtual Stack<T> doAllocate()
     {
+        Stack<T> newStack;
+
         {
             std::unique_ptr<std::vector<Node<T>>> newBlock(
                     new std::vector<Node<T>>(this->m_blockSize));
@@ -256,15 +311,13 @@ private:
         }
 
         std::vector<Node<T>>& newBlock(*m_blocks.back());
-        Stack<T> newStack;
 
         for (std::size_t i(0); i < newBlock.size(); ++i)
         {
             newStack.push(&newBlock[i]);
         }
 
-        std::lock_guard<std::mutex> lock(this->m_mutex);
-        this->m_stack.push(newStack);
+        return newStack;
     }
 
     virtual void construct(T* val)
@@ -293,8 +346,10 @@ public:
     { }
 
 private:
-    virtual void doAllocate()
+    virtual Stack<T*> doAllocate()
     {
+        Stack<T*> newStack;
+
         {
             std::unique_ptr<std::vector<T>> newBytes(
                     new std::vector<T>(m_bytesPerBlock));
@@ -309,7 +364,6 @@ private:
 
         std::vector<T>& newBytes(*m_bytes.back());
         std::vector<Node<T*>>& newNodes(*m_nodes.back());
-        Stack<T*> newStack;
 
         for (std::size_t i(0); i < this->m_blockSize; ++i)
         {
@@ -318,8 +372,7 @@ private:
             newStack.push(&node);
         }
 
-        std::lock_guard<std::mutex> lock(this->m_mutex);
-        this->m_stack.push(newStack);
+        return newStack;
     }
 
     virtual void construct(T** val)
