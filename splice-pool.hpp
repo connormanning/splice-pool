@@ -451,7 +451,7 @@ private:
         return stack;
     }
 
-    virtual void construct(T** val) override
+    virtual void construct(T** val) const override
     {
         std::fill(*val, *val + m_bufferSize, 0);
     }
