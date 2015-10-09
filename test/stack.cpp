@@ -188,12 +188,58 @@ TEST(Stack, PopStackPartial)
 
 TEST(Stack, PopStackFull)
 {
-    // TODO
+    std::vector<splicer::Node<int>> nodes(makeNodes());
+    splicer::Stack<int> stack(makeStack(nodes));
+
+    const std::size_t total(values.size());
+
+    Counter<int> counter;
+    for (const auto v : values) counter.add(v);
+
+    ASSERT_EQ(stack.size(), total);
+
+    splicer::Stack<int> other(stack.popStack(total));
+
+    EXPECT_EQ(stack.size(), 0);
+    EXPECT_TRUE(stack.empty());
+    EXPECT_EQ(other.size(), total);
+    EXPECT_FALSE(other.empty());
+
+    while (!other.empty())
+    {
+        ASSERT_TRUE(counter.sub(other.pop()->val()));
+    }
+
+    EXPECT_TRUE(counter.empty());
+    EXPECT_TRUE(other.empty());
 }
 
 TEST(Stack, PopStackTooMany)
 {
-    // TODO
+    std::vector<splicer::Node<int>> nodes(makeNodes());
+    splicer::Stack<int> stack(makeStack(nodes));
+
+    const std::size_t total(values.size());
+
+    Counter<int> counter;
+    for (const auto v : values) counter.add(v);
+
+    ASSERT_EQ(stack.size(), total);
+
+    splicer::Stack<int> other(stack.popStack(total + 1));
+
+    EXPECT_EQ(stack.size(), 0);
+    EXPECT_TRUE(stack.empty());
+    EXPECT_EQ(other.size(), total);
+    EXPECT_FALSE(other.empty());
+
+    while (!other.empty())
+    {
+        ASSERT_TRUE(counter.sub(other.pop()->val()));
+    }
+
+    EXPECT_TRUE(counter.empty());
+    EXPECT_TRUE(other.empty());
 }
 
 TEST(Stack, PushPopSingle)
