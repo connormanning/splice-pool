@@ -88,6 +88,38 @@ TEST(Stack, PushNode)
     EXPECT_TRUE(stack.empty());
 }
 
+TEST(Stack, Swap)
+{
+    std::vector<splicer::Node<int>> nodes(makeNodes());
+    splicer::Stack<int> stack(makeStack(nodes));
+
+    splicer::Stack<int> other;
+
+    EXPECT_EQ(stack.size(), values.size());
+    EXPECT_FALSE(stack.empty());
+    EXPECT_EQ(other.size(), 0);
+    EXPECT_TRUE(other.empty());
+
+    stack.swap(other);
+
+    EXPECT_EQ(stack.size(), 0);
+    EXPECT_TRUE(stack.empty());
+    EXPECT_EQ(other.size(), values.size());
+    EXPECT_FALSE(other.empty());
+
+    Counter<int> counter;
+    for (const auto v : values) counter.add(v);
+
+    while (!other.empty())
+    {
+        ASSERT_TRUE(counter.sub(other.pop()->val()));
+    }
+
+    ASSERT_EQ(other.size(), 0);
+    ASSERT_TRUE(other.empty());
+    ASSERT_TRUE(counter.empty());
+}
+
 TEST(Stack, PushStack)
 {
     splicer::Stack<int> stack;

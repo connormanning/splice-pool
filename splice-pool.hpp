@@ -90,8 +90,7 @@ public:
 
         if (count >= size())
         {
-            other = *this;
-            clear();
+            swap(other);
         }
         else if (count)
         {
@@ -136,6 +135,11 @@ public:
         {
             std::cout << "(empty)" << std::endl;
         }
+    }
+
+    void swap(Stack& other)
+    {
+        std::swap(*this, other);
     }
 
 private:
@@ -185,18 +189,27 @@ public:
     typedef Stack<T> StackType;
 
     SplicePool(std::size_t blockSize)
-        : m_stack()
-        , m_blockSize(blockSize)
+        : m_blockSize(blockSize)
+        , m_stack()
         , m_mutex()
         , m_adding()
-        , m_count(0)
+        , m_allocated(0)
     {
         m_adding.clear();
     }
 
     virtual ~SplicePool() { }
 
-    std::size_t count() const { return m_count.load(); }
+    std::size_t allocated() const
+    {
+        return m_allocated.load();
+    }
+
+    std::size_t available() const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_stack.size();
+    }
 
     void release(Node<T>* node)
     {
@@ -245,12 +258,41 @@ public:
         }
     }
 
-    /*
-    Stack<T> acquireStack(std::size_t count)
+    Stack<T> acquireStack(const std::size_t count)
     {
-        // TODO
+        Stack<T> other;
+
+        std::unique_lock<std::mutex> lock(m_mutex);
+        if (count >= m_stack.size())
+        {
+            m_stack.swap(other);
+
+            lock.unlock();
+
+            if (count > other.size())
+            {
+                const std::size_t nodesNeeded(count - other.size());
+                const std::size_t blocksNeeded(nodesNeeded / m_blockSize + 1);
+
+                Stack<T> alloc(doAllocate(blocksNeeded));
+
+                m_allocated += alloc.size();
+                assert(alloc.size() == blocksNeeded * m_blockSize);
+
+                Stack<T> taken(alloc.popStack(nodesNeeded));
+                other.push(taken);
+
+                lock.lock();
+                m_stack.push(alloc);
+            }
+        }
+        else
+        {
+            other = m_stack.popStack(count);
+        }
+
+        return other;
     }
-    */
 
 protected:
     void allocate()
@@ -259,8 +301,8 @@ protected:
 
         if (locker.tryLock())
         {
-            Stack<T> newStack(doAllocate());
-            m_count += m_blockSize;
+            Stack<T> newStack(doAllocate(1));
+            m_allocated += m_blockSize;
 
             std::lock_guard<std::mutex> lock(m_mutex);
             m_stack.push(newStack);
@@ -277,17 +319,18 @@ protected:
         construct(val);
     }
 
-    virtual Stack<T> doAllocate() = 0;
-    virtual void construct(T*) { }
-    virtual void destruct(T*) { }
+    virtual Stack<T> doAllocate(std::size_t blocks) = 0;
+    virtual void construct(T*) const { }
+    virtual void destruct(T*) const { }
 
-    Stack<T> m_stack;
     const std::size_t m_blockSize;
-    std::mutex m_mutex;
 
 private:
+    Stack<T> m_stack;
+    mutable std::mutex m_mutex;
+
     std::atomic_flag m_adding;
-    std::atomic_size_t m_count;
+    std::atomic_size_t m_allocated;
 };
 
 template<typename T>
@@ -297,40 +340,54 @@ public:
     ObjectPool(std::size_t blockSize = 4096)
         : SplicePool<T>(blockSize)
         , m_blocks()
+        , m_mutex()
     { }
 
 private:
-    virtual Stack<T> doAllocate()
+    virtual Stack<T> doAllocate(std::size_t blocks) override
     {
-        Stack<T> newStack;
+        Stack<T> stack;
+        std::deque<std::unique_ptr<std::vector<Node<T>>>> newBlocks;
 
+        for (std::size_t i(0); i < blocks; ++i)
         {
             std::unique_ptr<std::vector<Node<T>>> newBlock(
                     new std::vector<Node<T>>(this->m_blockSize));
-            m_blocks.push_back(std::move(newBlock));
+            newBlocks.push_back(std::move(newBlock));
         }
 
-        std::vector<Node<T>>& newBlock(*m_blocks.back());
-
-        for (std::size_t i(0); i < newBlock.size(); ++i)
+        for (auto& block : newBlocks)
         {
-            newStack.push(&newBlock[i]);
+            auto& vec(*block);
+
+            for (std::size_t i(0); i < vec.size(); ++i)
+            {
+                stack.push(&vec[i]);
+            }
         }
 
-        return newStack;
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        m_blocks.insert(
+                m_blocks.end(),
+                std::make_move_iterator(newBlocks.begin()),
+                std::make_move_iterator(newBlocks.end()));
+
+        return stack;
     }
 
-    virtual void construct(T* val)
+    virtual void construct(T* val) const override
     {
         new (val) T();
     }
 
-    virtual void destruct(T* val)
+    virtual void destruct(T* val) const override
     {
         val->~T();
     }
 
     std::deque<std::unique_ptr<std::vector<Node<T>>>> m_blocks;
+    mutable std::mutex m_mutex;
 };
 
 template<typename T>
@@ -343,39 +400,58 @@ public:
         , m_bytesPerBlock(m_bufferSize * this->m_blockSize)
         , m_bytes()
         , m_nodes()
+        , m_mutex()
     { }
 
 private:
-    virtual Stack<T*> doAllocate()
+    virtual Stack<T*> doAllocate(std::size_t blocks) override
     {
-        Stack<T*> newStack;
+        Stack<T*> stack;
 
+        std::deque<std::unique_ptr<std::vector<T>>> newBytes;
+        std::deque<std::unique_ptr<std::vector<Node<T*>>>> newNodes;
+
+        for (std::size_t i(0); i < blocks; ++i)
         {
-            std::unique_ptr<std::vector<T>> newBytes(
+            std::unique_ptr<std::vector<T>> newByteBlock(
                     new std::vector<T>(m_bytesPerBlock));
-            m_bytes.push_back(std::move(newBytes));
-        }
 
-        {
-            std::unique_ptr<std::vector<Node<T*>>> newNodes(
+            std::unique_ptr<std::vector<Node<T*>>> newNodeBlock(
                     new std::vector<Node<T*>>(this->m_blockSize));
-            m_nodes.push_back(std::move(newNodes));
+
+            newBytes.push_back(std::move(newByteBlock));
+            newNodes.push_back(std::move(newNodeBlock));
         }
 
-        std::vector<T>& newBytes(*m_bytes.back());
-        std::vector<Node<T*>>& newNodes(*m_nodes.back());
-
-        for (std::size_t i(0); i < this->m_blockSize; ++i)
+        for (std::size_t i(0); i < blocks; ++i)
         {
-            Node<T*>& node(newNodes[i]);
-            node.val() = &newBytes[m_bufferSize * i];
-            newStack.push(&node);
+            std::vector<T>& newBytes(*m_bytes[i]);
+            std::vector<Node<T*>>& newNodes(*m_nodes[i]);
+
+            for (std::size_t i(0); i < this->m_blockSize; ++i)
+            {
+                Node<T*>& node(newNodes[i]);
+                node.val() = &newBytes[m_bufferSize * i];
+                stack.push(&node);
+            }
         }
 
-        return newStack;
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        m_bytes.insert(
+                m_bytes.end(),
+                std::make_move_iterator(newBytes.begin()),
+                std::make_move_iterator(newBytes.end()));
+
+        m_nodes.insert(
+                m_nodes.end(),
+                std::make_move_iterator(newNodes.begin()),
+                std::make_move_iterator(newNodes.end()));
+
+        return stack;
     }
 
-    virtual void construct(T** val)
+    virtual void construct(T** val) override
     {
         std::fill(*val, *val + m_bufferSize, 0);
     }
@@ -385,6 +461,7 @@ private:
 
     std::deque<std::unique_ptr<std::vector<T>>> m_bytes;
     std::deque<std::unique_ptr<std::vector<Node<T*>>>> m_nodes;
+    mutable std::mutex m_mutex;
 };
 
 } // namespace splicer
