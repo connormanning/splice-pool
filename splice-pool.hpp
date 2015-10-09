@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <iostream>
 #include <mutex>
 #include <thread>
 #include <type_traits>
@@ -56,7 +57,8 @@ public:
         if (!other.empty())
         {
             push(other.m_tail);
-            m_head = other.m_head;
+            m_head = other.head();
+            other.clear();
         }
     }
 
@@ -73,7 +75,7 @@ public:
 
     bool empty() const { return !m_head; }
 
-    void print(std::size_t maxElements = 10) const
+    void print(std::size_t maxElements) const
     {
         if (Node<T>* current = m_head)
         {
@@ -97,6 +99,7 @@ public:
 
 private:
     Node<T>* head() { return m_head; }
+    void clear() { m_head = nullptr; }
 
     Node<T>* m_tail;
     Node<T>* m_head;
@@ -194,7 +197,10 @@ public:
         }
     }
 
-    void print(std::size_t maxElements) const { m_stack.print(maxElements); }
+    void print(std::size_t maxElements = 10) const
+    {
+        m_stack.print(maxElements);
+    }
 
 protected:
     void allocate()
