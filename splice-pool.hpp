@@ -46,8 +46,6 @@ private:
 template<typename T>
 class Stack
 {
-    friend class SplicePool<T>;
-
 public:
     Stack() : m_tail(nullptr), m_head(nullptr), m_size(0) { }
 
@@ -142,9 +140,9 @@ public:
         std::swap(*this, other);
     }
 
-private:
     Node<T>* head() { return m_head; }
 
+private:
     void clear()
     {
         m_head = nullptr;
