@@ -31,28 +31,6 @@ namespace
 
         return stack;
     }
-
-    // If we're checking stack contents we don't care about the order.  This
-    // utility tracks that all values are present.
-    template<typename T>
-    class Counter
-    {
-    public:
-        void add(T val) { ++m_counts[val]; }
-
-        bool sub(T val)
-        {
-            if (!m_counts.count(val)) return false;
-            if (!--m_counts[val]) m_counts.erase(val);
-
-            return true;
-        }
-
-        bool empty() const { return m_counts.empty(); }
-
-    private:
-        std::map<T, int> m_counts;
-    };
 }
 
 TEST(Stack, PopEmpty)
