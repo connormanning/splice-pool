@@ -259,8 +259,14 @@ public:
 
     struct NodeDelete
     {
-        NodeDelete(SplicePool* splicePool) : m_splicePool(splicePool) { }
-        void operator()(NodeType* node) { m_splicePool->release(node); }
+        explicit NodeDelete(SplicePool* splicePool = nullptr)
+            : m_splicePool(splicePool)
+        { }
+
+        void operator()(NodeType* node)
+        {
+            if (m_splicePool) m_splicePool->release(node);
+        }
 
     private:
         SplicePool* m_splicePool;

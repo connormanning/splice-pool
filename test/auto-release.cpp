@@ -176,3 +176,26 @@ TEST(UniqueSemantics, ManualRelease)
     }
 }
 
+TEST(UniqueSemantics, DefaultConstruct)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+
+    // This node doesn't have a real deleter since it's not tied to a pool
+    // instance.
+    splicer::ObjectPool<int>::UniqueNodeType node;
+
+    EXPECT_FALSE(node.get());
+    ASSERT_NO_THROW(node.reset());
+
+    // Reset the node with a real deleter.
+    node = pool.acquireOne(42);
+
+    EXPECT_EQ(pool.available(), pool.allocated() - 1);
+    ASSERT_TRUE(node.get());
+    EXPECT_EQ(node->val(), 42);
+
+    node.reset();
+
+    EXPECT_EQ(pool.available(), pool.allocated());
+}
+
