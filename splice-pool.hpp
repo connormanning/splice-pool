@@ -1,10 +1,10 @@
 #pragma once
 
 #include <algorithm>
-#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -16,11 +16,11 @@ namespace splicer
 
 template<typename T> class Stack;
 template<typename T> class SplicePool;
+template<typename T> class UniqueStack;
 
 template<typename T>
 class Node
 {
-    friend class SplicePool<T>;
     friend class Stack<T>;
 
 public:
@@ -35,9 +35,10 @@ public:
     T& val() { return m_val; }
     const T& val() const { return m_val; }
 
-private:
     Node* next() { return m_next; }
-    void next(Node* node) { m_next = node; }
+
+private:
+    void setNext(Node* node) { m_next = node; }
 
     T m_val;
     Node* m_next;
@@ -46,14 +47,17 @@ private:
 template<typename T>
 class Stack
 {
+    friend class UniqueStack<T>;
+
 public:
     Stack() : m_tail(nullptr), m_head(nullptr), m_size(0) { }
+    virtual ~Stack() { }
 
     void push(Node<T>* node)
     {
         assert(!m_tail || m_size);
 
-        node->next(m_head);
+        node->setNext(m_head);
         m_head = node;
 
         if (!m_size) m_tail = node;
@@ -71,7 +75,7 @@ public:
         }
     }
 
-    Node<T>* pop()
+    virtual Node<T>* pop()
     {
         Node<T>* node(m_head);
         if (m_head)
@@ -82,7 +86,7 @@ public:
         return node;
     }
 
-    Stack popStack(std::size_t count)
+    virtual Stack popStack(std::size_t count)
     {
         Stack other;
 
@@ -90,17 +94,15 @@ public:
         {
             swap(other);
         }
-        else if (count)
+        else if (count && !empty())
         {
-            assert(!empty());
-
             Node<T>* tail(m_head);
             for (std::size_t i(0); i < count - 1; ++i) tail = tail->next();
 
             other.m_head = m_head;
             m_head = tail->next();
 
-            tail->next(nullptr);
+            tail->setNext(nullptr);
             other.m_tail = tail;
 
             other.m_size = count;
@@ -142,7 +144,7 @@ public:
 
     Node<T>* head() { return m_head; }
 
-private:
+protected:
     void clear()
     {
         m_head = nullptr;
@@ -150,33 +152,70 @@ private:
         m_size = 0;
     }
 
+private:
     Node<T>* m_tail;
     Node<T>* m_head;
     std::size_t m_size;
 };
 
-class TryLocker
+template<typename T>
+class UniqueStack
 {
 public:
-    explicit TryLocker(std::atomic_flag& flag)
-        : m_set(false)
-        , m_flag(flag)
+    UniqueStack(SplicePool<T>& splicePool)
+        : m_splicePool(splicePool)
+        , m_stack()
     { }
 
-    ~TryLocker()
+    UniqueStack(SplicePool<T>& splicePool, Stack<T>&& stack)
+        : m_splicePool(splicePool)
+        , m_stack(stack)
+    { }
+
+    UniqueStack(UniqueStack&& other)
+        : m_splicePool(other.m_splicePool)
+        , m_stack(other.m_stack)
     {
-        if (m_set) m_flag.clear();
+        other->clear();
     }
 
-    bool tryLock()
+    UniqueStack& operator=(UniqueStack&& other)
     {
-        m_set = !m_flag.test_and_set();
-        return m_set;
+        reset(other);
     }
+
+    ~UniqueStack() { m_splicePool.release(m_stack); }
+
+    Stack<T> release()
+    {
+        Stack<T> other(m_stack);
+        m_stack.clear();
+        return other;
+    }
+
+    void reset(Stack<T>&& other)
+    {
+        m_splicePool.release(m_stack);
+        m_stack = other;
+        other->clear();
+    }
+
+    void reset()
+    {
+        m_splicePool.release(m_stack);
+    }
+
+    Stack<T>& operator*() { return m_stack; }
+    Stack<T>* operator->() { return &m_stack; }
+    Stack<T>* get() { return &m_stack; }
+    explicit operator bool() const { return !m_stack.empty(); }
 
 private:
-    bool m_set;
-    std::atomic_flag& m_flag;
+    UniqueStack(const UniqueStack&) = delete;
+    UniqueStack& operator=(UniqueStack&) = delete;
+
+    SplicePool<T>& m_splicePool;
+    Stack<T> m_stack;
 };
 
 template<typename T>
@@ -184,23 +223,26 @@ class SplicePool
 {
 public:
     typedef Node<T> NodeType;
+    typedef std::function<void(NodeType*)> NodeDeleterType;
+    typedef std::unique_ptr<NodeType, NodeDeleterType> UniqueNodeType;
+
     typedef Stack<T> StackType;
+    typedef UniqueStack<T> UniqueStackType;
 
     SplicePool(std::size_t blockSize)
         : m_blockSize(blockSize)
         , m_stack()
         , m_mutex()
-        , m_adding()
         , m_allocated(0)
-    {
-        m_adding.clear();
-    }
+        , m_nodeDeleter([this](Node<T>* node) { this->release(node); })
+    { }
 
     virtual ~SplicePool() { }
 
     std::size_t allocated() const
     {
-        return m_allocated.load();
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_allocated;
     }
 
     std::size_t available() const
@@ -211,106 +253,100 @@ public:
 
     void release(Node<T>* node)
     {
-        reset(&node->val());
+        if (node)
+        {
+            reset(&node->val());
 
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_stack.push(node);
+            // TODO - For single node releases, we could put them into a
+            // separate Stack to avoid blocking the entire pool, and only reach
+            // into it when some threshold is reached or the main stack is
+            // empty.
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_stack.push(node);
+        }
     }
 
     void release(Stack<T>& other)
     {
-        Node<T>* node(other.head());
-        while (node)
+        if (Node<T>* node = other.head())
         {
-            reset(&node->val());
-            node = node->next();
-        }
+            while (node)
+            {
+                reset(&node->val());
+                node = node->next();
+            }
 
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_stack.push(other);
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_stack.push(other);
+        }
     }
 
     template<class... Args>
-    Node<T>* acquire(Args&&... args)
+    UniqueNodeType acquireOne(Args&&... args)
     {
-        Node<T>* node(0);
+        UniqueNodeType node(nullptr, m_nodeDeleter);
 
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            node = m_stack.pop();
+            node.reset(m_stack.pop());
         }
 
-        if (node)
+        if (!node)
         {
-            if (!std::is_pointer<T>::value)
-            {
-                node->construct(std::forward<Args>(args)...);
-            }
+            Stack<T> newStack(doAllocate(1));
+            node.reset(newStack.pop());
 
-            return node;
+            std::lock_guard<std::mutex> lock(m_mutex);
+
+            m_allocated += m_blockSize;
+            m_stack.push(newStack);
         }
-        else
+
+        if (!std::is_pointer<T>::value)
         {
-            allocate();
-            return acquire(std::forward<Args>(args)...);
+            node->construct(std::forward<Args>(args)...);
         }
+
+        return node;
     }
 
-    Stack<T> acquireStack(const std::size_t count)
+    UniqueStackType acquire(const std::size_t count)
     {
-        Stack<T> other;
+        UniqueStackType other(*this);
 
         std::unique_lock<std::mutex> lock(m_mutex);
         if (count >= m_stack.size())
         {
-            m_stack.swap(other);
+            m_stack.swap(*other);
 
             lock.unlock();
 
-            if (count > other.size())
+            if (count > other->size())
             {
-                const std::size_t numNodes(count - other.size());
+                const std::size_t numNodes(count - other->size());
                 const std::size_t numBlocks(numNodes / m_blockSize + 1);
 
                 Stack<T> alloc(doAllocate(numBlocks));
 
-                m_allocated += alloc.size();
                 assert(alloc.size() == numBlocks * m_blockSize);
 
                 Stack<T> taken(alloc.popStack(numNodes));
-                other.push(taken);
+                other->push(taken);
 
                 lock.lock();
                 m_stack.push(alloc);
+                m_allocated += numBlocks * m_blockSize;
             }
         }
         else
         {
-            other = m_stack.popStack(count);
+            *other = m_stack.popStack(count);
         }
 
         return other;
     }
 
 protected:
-    void allocate()
-    {
-        TryLocker locker(m_adding);
-
-        if (locker.tryLock())
-        {
-            Stack<T> newStack(doAllocate(1));
-            m_allocated += m_blockSize;
-
-            std::lock_guard<std::mutex> lock(m_mutex);
-            m_stack.push(newStack);
-        }
-        else
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-    }
-
     void reset(T* val)
     {
         destruct(val);
@@ -324,11 +360,15 @@ protected:
     const std::size_t m_blockSize;
 
 private:
+    SplicePool(const SplicePool&) = delete;
+    SplicePool& operator=(const SplicePool&) = delete;
+
     Stack<T> m_stack;
     mutable std::mutex m_mutex;
 
-    std::atomic_flag m_adding;
-    std::atomic_size_t m_allocated;
+    std::size_t m_allocated;
+
+    const NodeDeleterType m_nodeDeleter;
 };
 
 template<typename T>
@@ -392,7 +432,7 @@ template<typename T>
 class BufferPool : public SplicePool<T*>
 {
 public:
-    BufferPool(std::size_t bufferSize, std::size_t blockSize = 1)
+    BufferPool(std::size_t bufferSize, std::size_t blockSize = 4096)
         : SplicePool<T*>(blockSize)
         , m_bufferSize(bufferSize)
         , m_bytesPerBlock(m_bufferSize * this->m_blockSize)

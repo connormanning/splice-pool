@@ -13,7 +13,7 @@ TEST(ObjectPool, CopyConstruct)
 
     EXPECT_EQ(pool.allocated(), pool.available());
 
-    ASSERT_TRUE(node = pool.acquire());
+    ASSERT_TRUE(node = pool.acquireOne().release());
 
     EXPECT_GE(pool.allocated(), blockSize);
     EXPECT_EQ(pool.available(), pool.allocated() - 1);
@@ -31,7 +31,7 @@ TEST(ObjectPool, ForwardConstruct)
 
     EXPECT_EQ(pool.allocated(), pool.available());
 
-    ASSERT_TRUE(node = pool.acquire(42));
+    ASSERT_TRUE(node = pool.acquireOne(42).release());
     EXPECT_EQ(node->val(), 42);
 
     EXPECT_GE(pool.allocated(), blockSize);
@@ -47,7 +47,7 @@ TEST(ObjectPool, MultipleAlloc)
 
     for (std::size_t i(0); i < blockSize * 2; ++i)
     {
-        nodes.push_back(pool.acquire(i));
+        nodes.push_back(pool.acquireOne(i).release());
     }
 
     ASSERT_GE(pool.allocated(), blockSize * 2);
@@ -80,7 +80,7 @@ TEST(ObjectPool, ReleaseStack)
 
     for (std::size_t i(0); i < blockSize * 2; ++i)
     {
-        node = pool.acquire(i);
+        node = pool.acquireOne(i).release();
 
         ASSERT_TRUE(node);
         stack.push(node);
@@ -120,7 +120,7 @@ TEST(ObjectPool, ReleaseStack)
 TEST(ObjectPool, AcquireStackFromEmpty)
 {
     splicer::ObjectPool<int> pool(blockSize);
-    splicer::Stack<int> stack(pool.acquireStack(blockSize * 2));
+    splicer::Stack<int> stack(pool.acquire(blockSize * 2).release());
 
     EXPECT_EQ(stack.size(), blockSize * 2);
     EXPECT_GE(pool.allocated(), blockSize * 2);
@@ -130,14 +130,14 @@ TEST(ObjectPool, AcquireStackFromEmpty)
 TEST(ObjectPool, AcquireStackFromPopulated)
 {
     splicer::ObjectPool<int> pool(blockSize);
-    splicer::Stack<int> stack(pool.acquireStack(blockSize * 2));
+    splicer::Stack<int> stack(pool.acquire(blockSize * 2).release());
     pool.release(stack);
 
     ASSERT_EQ(pool.allocated(), pool.available());
     ASSERT_GE(pool.available(), blockSize * 2);
 
     const std::size_t size(pool.available());
-    stack = pool.acquireStack(size - 1);
+    stack = pool.acquire(size - 1).release();
 
     EXPECT_EQ(stack.size(), size - 1);
     EXPECT_FALSE(stack.empty());

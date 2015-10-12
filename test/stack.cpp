@@ -47,7 +47,7 @@ TEST(Stack, PopEmpty)
     EXPECT_EQ(stack.size(), 0);
 }
 
-TEST(Stack, PushNode)
+TEST(Stack, PushPopNode)
 {
     splicer::Stack<int> stack;
 
@@ -62,7 +62,10 @@ TEST(Stack, PushNode)
     EXPECT_FALSE(stack.empty());
     EXPECT_EQ(stack.size(), 1);
 
-    EXPECT_EQ(stack.pop()->val(), value);
+    splicer::Node<int>* popped(stack.pop());
+    ASSERT_TRUE(popped);
+    EXPECT_EQ(popped->val(), value);
+    EXPECT_FALSE(popped->next());
     EXPECT_TRUE(stack.empty());
 }
 
