@@ -1,4 +1,10 @@
-add_executable(splice-pool-test stack.cpp object-pool.cpp unit.cpp)
+add_executable(
+    splice-pool-test
+    stack.cpp
+    object-pool.cpp
+    auto-release.cpp
+    unit.cpp)
+
 target_link_libraries(splice-pool-test gtest gtest_main)
 
 # We're overriding the test with a custom command for individual test output

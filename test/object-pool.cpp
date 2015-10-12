@@ -111,8 +111,9 @@ TEST(ObjectPool, ReleaseStack)
     EXPECT_FALSE(other.empty());
     EXPECT_EQ(other.size(), blockSize * 2);
 
-    EXPECT_NO_THROW(pool.release(other));
+    EXPECT_NO_THROW(pool.release(std::move(other)));
 
+    EXPECT_TRUE(other.empty());
     EXPECT_GE(pool.allocated(), blockSize * 2);
     EXPECT_EQ(pool.available(), pool.allocated());
 }
@@ -131,10 +132,11 @@ TEST(ObjectPool, AcquireStackFromPopulated)
 {
     splicer::ObjectPool<int> pool(blockSize);
     splicer::Stack<int> stack(pool.acquire(blockSize * 2).release());
-    pool.release(stack);
+    pool.release(std::move(stack));
 
     ASSERT_EQ(pool.allocated(), pool.available());
     ASSERT_GE(pool.available(), blockSize * 2);
+    ASSERT_TRUE(stack.empty());
 
     const std::size_t size(pool.available());
     stack = pool.acquire(size - 1).release();
@@ -144,7 +146,7 @@ TEST(ObjectPool, AcquireStackFromPopulated)
     EXPECT_EQ(pool.available(), 1);
     EXPECT_EQ(pool.allocated(), size);
 
-    pool.release(stack);
+    pool.release(std::move(stack));
 
     EXPECT_EQ(stack.size(), 0);
     EXPECT_TRUE(stack.empty());

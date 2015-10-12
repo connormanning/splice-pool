@@ -51,7 +51,6 @@ class Stack
 
 public:
     Stack() : m_tail(nullptr), m_head(nullptr), m_size(0) { }
-    virtual ~Stack() { }
 
     void push(Node<T>* node)
     {
@@ -75,7 +74,7 @@ public:
         }
     }
 
-    virtual Node<T>* pop()
+    Node<T>* pop()
     {
         Node<T>* node(m_head);
         if (m_head)
@@ -86,7 +85,7 @@ public:
         return node;
     }
 
-    virtual Stack popStack(std::size_t count)
+    Stack popStack(std::size_t count)
     {
         Stack other;
 
@@ -164,27 +163,31 @@ class UniqueStack
 public:
     UniqueStack(SplicePool<T>& splicePool)
         : m_splicePool(splicePool)
+        , m_nodeDelete(&splicePool)
         , m_stack()
     { }
 
     UniqueStack(SplicePool<T>& splicePool, Stack<T>&& stack)
         : m_splicePool(splicePool)
+        , m_nodeDelete(&splicePool)
         , m_stack(stack)
-    { }
+    {
+        stack.clear();
+    }
 
     UniqueStack(UniqueStack&& other)
         : m_splicePool(other.m_splicePool)
-        , m_stack(other.m_stack)
-    {
-        other->clear();
-    }
+        , m_nodeDelete(other.m_nodeDelete)
+        , m_stack(other.release())
+    { }
 
     UniqueStack& operator=(UniqueStack&& other)
     {
-        reset(other);
+        reset(other.release());
+        return *this;
     }
 
-    ~UniqueStack() { m_splicePool.release(m_stack); }
+    ~UniqueStack() { m_splicePool.release(std::move(m_stack)); }
 
     Stack<T> release()
     {
@@ -195,26 +198,56 @@ public:
 
     void reset(Stack<T>&& other)
     {
-        m_splicePool.release(m_stack);
+        m_splicePool.release(std::move(m_stack));
         m_stack = other;
-        other->clear();
+        other.clear();
     }
 
     void reset()
     {
-        m_splicePool.release(m_stack);
+        m_splicePool.release(std::move(m_stack));
     }
 
-    Stack<T>& operator*() { return m_stack; }
-    Stack<T>* operator->() { return &m_stack; }
-    Stack<T>* get() { return &m_stack; }
-    explicit operator bool() const { return !m_stack.empty(); }
+    void push(Node<T>* node) { m_stack.push(node); }
+    void push(Stack<T>& other) { m_stack.push(other); }
+
+    void push(typename SplicePool<T>::UniqueNodeType&& node)
+    {
+        Node<T>* pushing(node.release());
+        m_stack.push(pushing);
+    }
+
+    void push(UniqueStack&& other)
+    {
+        Stack<T> pushing(other.release());
+        m_stack.push(pushing);
+    }
+
+    typename SplicePool<T>::UniqueNodeType pop()
+    {
+        return typename SplicePool<T>::UniqueNodeType(
+                m_stack.pop(),
+                m_nodeDelete);
+    }
+
+    UniqueStack popStack(std::size_t count)
+    {
+        Stack<T> stack(m_stack.popStack(count));
+        return UniqueStack(m_splicePool, std::move(stack));
+    }
+
+    bool empty() const { return m_stack.empty(); }
+    std::size_t size() const { return m_stack.size(); }
+    void print(std::size_t maxElements) const { m_stack.print(maxElements); }
+    void swap(UniqueStack&& other) { m_stack.swap(other.m_stack); }
+    Node<T>* head() { return m_stack.head(); }
 
 private:
     UniqueStack(const UniqueStack&) = delete;
     UniqueStack& operator=(UniqueStack&) = delete;
 
     SplicePool<T>& m_splicePool;
+    const typename SplicePool<T>::NodeDelete m_nodeDelete;
     Stack<T> m_stack;
 };
 
@@ -223,8 +256,17 @@ class SplicePool
 {
 public:
     typedef Node<T> NodeType;
-    typedef std::function<void(NodeType*)> NodeDeleterType;
-    typedef std::unique_ptr<NodeType, NodeDeleterType> UniqueNodeType;
+
+    struct NodeDelete
+    {
+        NodeDelete(SplicePool* splicePool) : m_splicePool(splicePool) { }
+        void operator()(NodeType* node) { m_splicePool->release(node); }
+
+    private:
+        SplicePool* m_splicePool;
+    };
+
+    typedef std::unique_ptr<NodeType, NodeDelete> UniqueNodeType;
 
     typedef Stack<T> StackType;
     typedef UniqueStack<T> UniqueStackType;
@@ -234,7 +276,7 @@ public:
         , m_stack()
         , m_mutex()
         , m_allocated(0)
-        , m_nodeDeleter([this](Node<T>* node) { this->release(node); })
+        , m_nodeDelete(this)
     { }
 
     virtual ~SplicePool() { }
@@ -251,13 +293,16 @@ public:
         return m_stack.size();
     }
 
+    void release(UniqueNodeType&& node) { node.reset(); }
+    void release(UniqueStackType&& stack) { stack.reset(); }
+
     void release(Node<T>* node)
     {
         if (node)
         {
             reset(&node->val());
 
-            // TODO - For single node releases, we could put them into a
+            // TODO - For these single node releases, we could put them into a
             // separate Stack to avoid blocking the entire pool, and only reach
             // into it when some threshold is reached or the main stack is
             // empty.
@@ -266,7 +311,7 @@ public:
         }
     }
 
-    void release(Stack<T>& other)
+    void release(Stack<T>&& other)
     {
         if (Node<T>* node = other.head())
         {
@@ -284,7 +329,7 @@ public:
     template<class... Args>
     UniqueNodeType acquireOne(Args&&... args)
     {
-        UniqueNodeType node(nullptr, m_nodeDeleter);
+        UniqueNodeType node(nullptr, m_nodeDelete);
 
         {
             std::lock_guard<std::mutex> lock(m_mutex);
@@ -317,13 +362,13 @@ public:
         std::unique_lock<std::mutex> lock(m_mutex);
         if (count >= m_stack.size())
         {
-            m_stack.swap(*other);
+            other = UniqueStackType(*this, std::move(m_stack));
 
             lock.unlock();
 
-            if (count > other->size())
+            if (count > other.size())
             {
-                const std::size_t numNodes(count - other->size());
+                const std::size_t numNodes(count - other.size());
                 const std::size_t numBlocks(numNodes / m_blockSize + 1);
 
                 Stack<T> alloc(doAllocate(numBlocks));
@@ -331,7 +376,7 @@ public:
                 assert(alloc.size() == numBlocks * m_blockSize);
 
                 Stack<T> taken(alloc.popStack(numNodes));
-                other->push(taken);
+                other.push(taken);
 
                 lock.lock();
                 m_stack.push(alloc);
@@ -340,7 +385,7 @@ public:
         }
         else
         {
-            *other = m_stack.popStack(count);
+            other = UniqueStackType(*this, m_stack.popStack(count));
         }
 
         return other;
@@ -367,8 +412,7 @@ private:
     mutable std::mutex m_mutex;
 
     std::size_t m_allocated;
-
-    const NodeDeleterType m_nodeDeleter;
+    const NodeDelete m_nodeDelete;
 };
 
 template<typename T>
