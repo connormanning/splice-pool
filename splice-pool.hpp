@@ -24,7 +24,7 @@ class Node
     friend class Stack<T>;
 
 public:
-    Node(Node* next = nullptr) : m_val(), m_next(next) { }
+    explicit Node(Node* next = nullptr) : m_val(), m_next(next) { }
 
     template<class... Args>
     void construct(Args&&... args)
@@ -223,14 +223,14 @@ public:
         m_stack.push(pushing);
     }
 
-    typename SplicePool<T>::UniqueNodeType pop()
+    typename SplicePool<T>::UniqueNodeType popOne()
     {
         return typename SplicePool<T>::UniqueNodeType(
                 m_stack.pop(),
                 m_nodeDelete);
     }
 
-    UniqueStack popStack(std::size_t count)
+    UniqueStack pop(std::size_t count)
     {
         Stack<T> stack(m_stack.popStack(count));
         return UniqueStack(m_splicePool, std::move(stack));

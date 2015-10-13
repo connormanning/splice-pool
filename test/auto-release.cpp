@@ -48,7 +48,7 @@ TEST(UniqueSemantics, AutoReleaseStack)
         EXPECT_EQ(pool.available(), pool.allocated() - count);
 
         // Pop a Node from the UniqueStack and release it.
-        splicer::ObjectPool<int>::UniqueNodeType node(stack.pop());
+        splicer::ObjectPool<int>::UniqueNodeType node(stack.popOne());
         EXPECT_EQ(stack.size(), --count);
         EXPECT_TRUE(node.get());
 
@@ -59,7 +59,7 @@ TEST(UniqueSemantics, AutoReleaseStack)
 
         // Pop a UniqueStack from the first UniqueStack and release it.
         ASSERT_GT(count, 4);
-        splicer::ObjectPool<int>::UniqueStackType other(stack.popStack(4));
+        splicer::ObjectPool<int>::UniqueStackType other(stack.pop(4));
 
         count -= 4;
 
@@ -172,6 +172,27 @@ TEST(UniqueSemantics, ManualRelease)
 
         pool.release(manual);
 
+        EXPECT_EQ(pool.available(), pool.allocated());
+    }
+
+    // Push a released Node onto a UniqueStack.
+    {
+        splicer::ObjectPool<int>::UniqueStackType stack(
+                pool.acquire(blockSize));
+
+        splicer::ObjectPool<int>::NodeType* node(pool.acquireOne(8).release());
+
+        EXPECT_EQ(pool.available(), pool.allocated() - blockSize - 1);
+        ASSERT_TRUE(node);
+        EXPECT_EQ(node->val(), 8);
+
+        EXPECT_EQ(stack.size(), blockSize);
+        stack.push(node);
+        EXPECT_EQ(stack.size(), blockSize + 1);
+
+        stack.reset();
+
+        EXPECT_TRUE(stack.empty());
         EXPECT_EQ(pool.available(), pool.allocated());
     }
 }
