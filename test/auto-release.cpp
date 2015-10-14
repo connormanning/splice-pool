@@ -15,6 +15,12 @@ TEST(UniqueSemantics, AutoReleaseNode)
         splicer::ObjectPool<int>::UniqueNodeType node(pool.acquireOne(42));
         ASSERT_TRUE(node.get());
         EXPECT_EQ(node->val(), 42);
+        EXPECT_EQ(**node, 42);  // Equivalent to above.
+
+        **node = 271828;
+
+        EXPECT_EQ(node->val(), 271828);
+        EXPECT_EQ(**node, 271828);
 
         EXPECT_GE(pool.allocated(), blockSize);
         EXPECT_EQ(pool.available(), pool.allocated() - 1);

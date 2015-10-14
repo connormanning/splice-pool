@@ -32,6 +32,8 @@ public:
         new (&m_val) T(std::forward<Args>(args)...);
     }
 
+    T& operator*() { return m_val; }
+    const T& operator*() const { return m_val; }
     T& val() { return m_val; }
     const T& val() const { return m_val; }
 
@@ -513,13 +515,13 @@ private:
 
         for (std::size_t i(0); i < blocks; ++i)
         {
-            std::vector<T>& newBytes(*m_bytes[i]);
-            std::vector<Node<T*>>& newNodes(*m_nodes[i]);
+            std::vector<T>& bytes(*newBytes[i]);
+            std::vector<Node<T*>>& nodes(*newNodes[i]);
 
             for (std::size_t i(0); i < this->m_blockSize; ++i)
             {
-                Node<T*>& node(newNodes[i]);
-                node.val() = &newBytes[m_bufferSize * i];
+                Node<T*>& node(nodes[i]);
+                node.val() = &bytes[m_bufferSize * i];
                 stack.push(&node);
             }
         }
