@@ -24,6 +24,42 @@ TEST(ObjectPool, CopyConstruct)
     EXPECT_NO_THROW(pool.release(node));
 }
 
+TEST(ObjectPool, ArrowOperator)
+{
+    struct Type
+    {
+        Type() : member(0) { }
+        explicit Type(int member) : member(member) { }
+
+        int& thing() { return member; }
+        const int& thing() const { return member; }
+
+        int member;
+    };
+
+    splicer::ObjectPool<Type> pool(blockSize);
+    splicer::ObjectPool<Type>::UniqueNodeType node(pool.acquireOne(42));
+
+    // Unique access.
+    EXPECT_EQ((*node)->thing(), 42);
+
+    (*node)->thing() = 314;
+    EXPECT_EQ((*node)->thing(), 314);
+
+    // Referenced access.
+    splicer::Node<Type>& ref(*node);
+    EXPECT_EQ(ref->thing(), 314);
+    EXPECT_EQ(ref.val().thing(), ref->thing());
+
+    // Released raw access.
+    splicer::Node<Type>* raw(node.release());
+
+    EXPECT_EQ((*raw)->thing(), 314);
+
+    (*raw)->thing() = 27818;
+    EXPECT_EQ((*raw)->thing(), 27818);
+}
+
 TEST(ObjectPool, ForwardConstruct)
 {
     splicer::ObjectPool<int> pool(blockSize);

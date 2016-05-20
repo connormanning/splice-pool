@@ -58,6 +58,9 @@ public:
     T& val() { return m_val; }
     const T& val() const { return m_val; }
 
+    T* operator->() { return &m_val; }
+    const T* operator->() const { return &m_val; }
+
     Node* next() { return m_next; }
 
 private:
