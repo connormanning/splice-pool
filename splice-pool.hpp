@@ -1,5 +1,5 @@
 /******************************************************************************
-    Copyright (c) 2015 Connor Manning
+    Copyright (c) 2016 Connor Manning
 
     Permission is hereby granted, free of charge, to any person obtaining a
     copy of this software and associated documentation files (the "Software"),
@@ -169,6 +169,36 @@ public:
     }
 
     Node<T>* head() { return m_head; }
+    const Node<T>* head() const { return m_head; }
+
+    class ConstIterator
+    {
+    public:
+        explicit ConstIterator(const Node<T>* node) : m_node(node) { }
+
+        ConstIterator& operator++()
+        {
+            m_node = m_node->next();
+            return *this;
+        }
+
+        ConstIterator operator++(int)
+        {
+            Iterator it(m_node);
+            m_node = m_node->next();
+            return it;
+        }
+
+        const Node<T>& operator*() const { return *m_node; }
+
+        bool operator!=(const ConstIterator& other) const
+        {
+            return m_node != other.m_node;
+        }
+
+    private:
+        const Node<T>* m_node;
+    };
 
     class Iterator
     {
@@ -201,7 +231,12 @@ public:
     };
 
     Iterator begin() { return Iterator(head()); }
-    const Iterator end() const { return Iterator(nullptr); }
+    ConstIterator begin() const { return ConstIterator(head()); }
+    ConstIterator cbegin() const { return begin(); }
+
+    Iterator end() { return Iterator(nullptr); }
+    ConstIterator end() const { return ConstIterator(nullptr); }
+    ConstIterator cend() const { return end(); }
 
 protected:
     void clear()
@@ -222,6 +257,7 @@ class UniqueStack
 {
 public:
     using Iterator = typename Stack<T>::Iterator;
+    using ConstIterator = typename Stack<T>::ConstIterator;
 
     UniqueStack(SplicePool<T>& splicePool)
         : m_splicePool(splicePool)
@@ -302,17 +338,17 @@ public:
     std::size_t size() const { return m_stack.size(); }
     void print(std::size_t maxElements) const { m_stack.print(maxElements); }
     void swap(UniqueStack&& other) { m_stack.swap(other.m_stack); }
+
     Node<T>* head() { return m_stack.head(); }
+    const Node<T>* head() const { return m_stack.head(); }
 
-    Iterator begin()
-    {
-        return Iterator(head());
-    }
+    Iterator begin() { return Iterator(head()); }
+    ConstIterator begin() const { return ConstIterator(head()); }
+    ConstIterator cbegin() const { return begin(); }
 
-    const Iterator end() const
-    {
-        return Iterator(nullptr);
-    }
+    Iterator end() { return Iterator(nullptr); }
+    ConstIterator end() const { return ConstIterator(nullptr); }
+    ConstIterator cend() const { return end(); }
 
 private:
     UniqueStack(const UniqueStack&) = delete;
