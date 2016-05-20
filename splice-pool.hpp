@@ -55,6 +55,7 @@ public:
 
     T& operator*() { return m_val; }
     const T& operator*() const { return m_val; }
+
     T& val() { return m_val; }
     const T& val() const { return m_val; }
 
@@ -220,6 +221,8 @@ template<typename T>
 class UniqueStack
 {
 public:
+    using Iterator = typename Stack<T>::Iterator;
+
     UniqueStack(SplicePool<T>& splicePool)
         : m_splicePool(splicePool)
         , m_nodeDelete(&splicePool)
@@ -301,14 +304,14 @@ public:
     void swap(UniqueStack&& other) { m_stack.swap(other.m_stack); }
     Node<T>* head() { return m_stack.head(); }
 
-    typename Stack<T>::Iterator begin()
+    Iterator begin()
     {
-        return typename Stack<T>::Iterator(head());
+        return Iterator(head());
     }
 
-    const typename Stack<T>::Iterator end() const
+    const Iterator end() const
     {
-        return typename Stack<T>::Iterator(nullptr);
+        return Iterator(nullptr);
     }
 
 private:
@@ -324,7 +327,7 @@ template<typename T>
 class SplicePool
 {
 public:
-    typedef Node<T> NodeType;
+    using NodeType = Node<T>;
 
     struct NodeDelete
     {
@@ -341,10 +344,10 @@ public:
         SplicePool* m_splicePool;
     };
 
-    typedef std::unique_ptr<NodeType, NodeDelete> UniqueNodeType;
+    using UniqueNodeType = std::unique_ptr<NodeType, NodeDelete>;
 
-    typedef Stack<T> StackType;
-    typedef UniqueStack<T> UniqueStackType;
+    using StackType = Stack<T>;
+    using UniqueStackType = UniqueStack<T>;
 
     SplicePool(std::size_t blockSize)
         : m_blockSize(blockSize)

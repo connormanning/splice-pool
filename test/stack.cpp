@@ -338,12 +338,12 @@ TEST(Stack, Iterate)
     std::size_t i(0);
     for (const auto& n : stack)
     {
-        EXPECT_EQ(n.val(), values.at(values.size() - i - 1));
+        EXPECT_EQ(*n, values.at(values.size() - i - 1));
         ++i;
     }
 
     for (auto& n : stack) { n.val() = 1; }
-    for (const auto& n : stack) { EXPECT_EQ(n.val(), 1); }
+    for (const auto& n : stack) { EXPECT_EQ(*n, 1); }
 }
 
 TEST(Stack, IterateCopy)
