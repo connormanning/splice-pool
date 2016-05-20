@@ -226,3 +226,71 @@ TEST(UniqueSemantics, DefaultConstruct)
     EXPECT_EQ(pool.available(), pool.allocated());
 }
 
+TEST(UniqueSemantics, Iterate)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::ObjectPool<int>::UniqueStackType stack(pool);
+
+    const std::size_t max(10);
+
+    for (std::size_t i(0); i < max; ++i)
+    {
+        stack.push(pool.acquireOne(i));
+    }
+
+    std::size_t i(0);
+    for (const auto& n : stack)
+    {
+        EXPECT_EQ(n.val(), max - i - 1);
+        ++i;
+    }
+
+    for (auto& n : stack) { n.val() = 1; }
+    for (const auto& n : stack) { EXPECT_EQ(n.val(), 1); }
+}
+
+TEST(UniqueSemantics, IterateCopy)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::ObjectPool<int>::UniqueStackType stack(pool);
+
+    const std::size_t max(10);
+
+    for (std::size_t i(0); i < max; ++i)
+    {
+        stack.push(pool.acquireOne(i));
+    }
+
+    std::size_t i(0);
+    for (const auto n : stack)
+    {
+        EXPECT_EQ(n.val(), max - i - 1);
+        ++i;
+    }
+
+    // Not actually changing the Stack values.
+    for (auto n : stack) { n.val() = 1; }
+
+    i = 0;
+    for (const auto n : stack)
+    {
+        EXPECT_EQ(n.val(), max - i - 1);
+        ++i;
+    }
+}
+
+TEST(UniqueSemantics, IterateEmpty)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::ObjectPool<int>::UniqueStackType stack(pool);
+
+    std::size_t i(0);
+    for (const auto& n : stack)
+    {
+        EXPECT_NE(n.val(), 12345);  // Get rid of unused variable warning.
+        ++i;
+    }
+
+    EXPECT_EQ(i, 0);
+}
+

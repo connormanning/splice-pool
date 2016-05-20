@@ -330,3 +330,56 @@ TEST(Stack, PushPopOtherStack)
     ASSERT_TRUE(stack.empty());
 }
 
+TEST(Stack, Iterate)
+{
+    std::vector<splicer::Node<int>> nodes(makeNodes());
+    splicer::Stack<int> stack(makeStack(nodes));
+
+    std::size_t i(0);
+    for (const auto& n : stack)
+    {
+        EXPECT_EQ(n.val(), values.at(values.size() - i - 1));
+        ++i;
+    }
+
+    for (auto& n : stack) { n.val() = 1; }
+    for (const auto& n : stack) { EXPECT_EQ(n.val(), 1); }
+}
+
+TEST(Stack, IterateCopy)
+{
+    std::vector<splicer::Node<int>> nodes(makeNodes());
+    splicer::Stack<int> stack(makeStack(nodes));
+
+    std::size_t i(0);
+    for (const auto n : stack)
+    {
+        EXPECT_EQ(n.val(), values.at(values.size() - i - 1));
+        ++i;
+    }
+
+    // Not actually changing the Stack values.
+    for (auto n : stack) { n.val() = 1; }
+
+    i = 0;
+    for (const auto n : stack)
+    {
+        EXPECT_EQ(n.val(), values.at(values.size() - i - 1));
+        ++i;
+    }
+}
+
+TEST(Stack, IterateEmpty)
+{
+    splicer::Stack<int> stack;
+
+    std::size_t i(0);
+    for (const auto& n : stack)
+    {
+        EXPECT_NE(n.val(), 12345);  // Get rid of unused variable warning.
+        ++i;
+    }
+
+    EXPECT_EQ(i, 0);
+}
+

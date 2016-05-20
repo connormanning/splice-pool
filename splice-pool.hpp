@@ -166,6 +166,39 @@ public:
 
     Node<T>* head() { return m_head; }
 
+    class Iterator
+    {
+    public:
+        explicit Iterator(Node<T>* node) : m_node(node) { }
+
+        Iterator& operator++()
+        {
+            m_node = m_node->next();
+            return *this;
+        }
+
+        Iterator operator++(int)
+        {
+            Iterator it(m_node);
+            m_node = m_node->next();
+            return it;
+        }
+
+        Node<T>& operator*() { return *m_node; }
+        const Node<T>& operator*() const { return *m_node; }
+
+        bool operator!=(const Iterator& other) const
+        {
+            return m_node != other.m_node;
+        }
+
+    private:
+        Node<T>* m_node;
+    };
+
+    Iterator begin() { return Iterator(head()); }
+    const Iterator end() const { return Iterator(nullptr); }
+
 protected:
     void clear()
     {
@@ -264,6 +297,16 @@ public:
     void print(std::size_t maxElements) const { m_stack.print(maxElements); }
     void swap(UniqueStack&& other) { m_stack.swap(other.m_stack); }
     Node<T>* head() { return m_stack.head(); }
+
+    typename Stack<T>::Iterator begin()
+    {
+        return typename Stack<T>::Iterator(head());
+    }
+
+    const typename Stack<T>::Iterator end() const
+    {
+        return typename Stack<T>::Iterator(nullptr);
+    }
 
 private:
     UniqueStack(const UniqueStack&) = delete;
