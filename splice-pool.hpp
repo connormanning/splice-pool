@@ -53,6 +53,12 @@ public:
         new (&m_val) T(std::forward<Args>(args)...);
     }
 
+    T& operator=(const T& val)
+    {
+        m_val = val;
+        return m_val;
+    }
+
     T& operator*() { return m_val; }
     const T& operator*() const { return m_val; }
 
@@ -171,8 +177,12 @@ public:
     Node<T>* head() { return m_head; }
     const Node<T>* head() const { return m_head; }
 
+    class Iterator;
+
     class ConstIterator
     {
+        friend class Iterator;
+
     public:
         explicit ConstIterator(const Node<T>* node) : m_node(node) { }
 
@@ -189,9 +199,14 @@ public:
             return it;
         }
 
-        const Node<T>& operator*() const { return *m_node; }
+        const T& operator*() const { return **m_node; }
 
         bool operator!=(const ConstIterator& other) const
+        {
+            return m_node != other.m_node;
+        }
+
+        bool operator!=(const Iterator& other) const
         {
             return m_node != other.m_node;
         }
@@ -202,6 +217,8 @@ public:
 
     class Iterator
     {
+        friend class ConstIterator;
+
     public:
         explicit Iterator(Node<T>* node) : m_node(node) { }
 
@@ -218,8 +235,13 @@ public:
             return it;
         }
 
-        Node<T>& operator*() { return *m_node; }
-        const Node<T>& operator*() const { return *m_node; }
+        T& operator*() { return **m_node; }
+        const T& operator*() const { return **m_node; }
+
+        bool operator!=(const ConstIterator& other) const
+        {
+            return m_node != other.m_node;
+        }
 
         bool operator!=(const Iterator& other) const
         {

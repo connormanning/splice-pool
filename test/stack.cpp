@@ -335,18 +335,50 @@ TEST(Stack, Iterate)
     std::vector<splicer::Node<int>> nodes(makeNodes());
     splicer::Stack<int> stack(makeStack(nodes));
 
+    splicer::Stack<int>::Iterator it(stack.begin());
+    const splicer::Stack<int>::ConstIterator end(stack.cend());
+
+    std::size_t i(0);
+
+    while (it != end)
+    {
+        EXPECT_EQ(*it, values.at(values.size() - ++i));
+        ++it;
+    }
+
+    ASSERT_EQ(i, makeNodes().size());
+
+    it = stack.begin();
+    while (it != end)
+    {
+        *it = 1;
+        ++it;
+    }
+
+    it = stack.begin();
+    while (it != end)
+    {
+        EXPECT_EQ(*it, 1);
+        ++it;
+    }
+}
+
+TEST(Stack, Range)
+{
+    std::vector<splicer::Node<int>> nodes(makeNodes());
+    splicer::Stack<int> stack(makeStack(nodes));
+
     std::size_t i(0);
     for (const auto& n : stack)
     {
-        EXPECT_EQ(*n, values.at(values.size() - i - 1));
-        ++i;
+        EXPECT_EQ(n, values.at(values.size() - ++i));
     }
 
-    for (auto& n : stack) { n.val() = 1; }
-    for (const auto& n : stack) { EXPECT_EQ(*n, 1); }
+    for (auto& n : stack) n = 1;
+    for (const auto& n : stack) EXPECT_EQ(n, 1);
 }
 
-TEST(Stack, IterateCopy)
+TEST(Stack, RangeCopy)
 {
     std::vector<splicer::Node<int>> nodes(makeNodes());
     splicer::Stack<int> stack(makeStack(nodes));
@@ -354,29 +386,27 @@ TEST(Stack, IterateCopy)
     std::size_t i(0);
     for (const auto n : stack)
     {
-        EXPECT_EQ(n.val(), values.at(values.size() - i - 1));
-        ++i;
+        EXPECT_EQ(n, values.at(values.size() - ++i));
     }
 
     // Not actually changing the Stack values.
-    for (auto n : stack) { n.val() = 1; }
+    for (auto n : stack) n = 1;
 
     i = 0;
     for (const auto n : stack)
     {
-        EXPECT_EQ(n.val(), values.at(values.size() - i - 1));
-        ++i;
+        EXPECT_EQ(n, values.at(values.size() - ++i));
     }
 }
 
-TEST(Stack, IterateEmpty)
+TEST(Stack, RangeEmpty)
 {
     splicer::Stack<int> stack;
 
     std::size_t i(0);
     for (const auto& n : stack)
     {
-        EXPECT_NE(n.val(), 12345);  // Get rid of unused variable warning.
+        EXPECT_NE(n, 12345);  // Get rid of unused variable warning.
         ++i;
     }
 

@@ -239,17 +239,57 @@ TEST(UniqueSemantics, Iterate)
     }
 
     std::size_t i(0);
+
+    splicer::ObjectPool<int>::UniqueStackType::Iterator it(stack.begin());
+    splicer::ObjectPool<int>::UniqueStackType::ConstIterator end(stack.cend());
+
+    while (it != end)
+    {
+        EXPECT_EQ(*it, max - ++i);
+        ++it;
+    }
+
+    ASSERT_EQ(i, max);
+
+    it = stack.begin();
+    while (it != end)
+    {
+        *it = 1;
+        ++it;
+    }
+
+    it = stack.begin();
+    while (it != end)
+    {
+        EXPECT_EQ(*it, 1);
+        ++it;
+    }
+}
+
+TEST(UniqueSemantics, Range)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::ObjectPool<int>::UniqueStackType stack(pool);
+
+    const std::size_t max(10);
+
+    for (std::size_t i(0); i < max; ++i)
+    {
+        stack.push(pool.acquireOne(i));
+    }
+
+    std::size_t i(0);
     for (const auto& n : stack)
     {
-        EXPECT_EQ(n.val(), max - i - 1);
+        EXPECT_EQ(n, max - i - 1);
         ++i;
     }
 
-    for (auto& n : stack) { n.val() = 1; }
-    for (const auto& n : stack) { EXPECT_EQ(n.val(), 1); }
+    for (auto& n : stack) n = 1;
+    for (const auto& n : stack) { EXPECT_EQ(n, 1); }
 }
 
-TEST(UniqueSemantics, IterateCopy)
+TEST(UniqueSemantics, RangeCopy)
 {
     splicer::ObjectPool<int> pool(blockSize);
     splicer::ObjectPool<int>::UniqueStackType stack(pool);
@@ -264,22 +304,22 @@ TEST(UniqueSemantics, IterateCopy)
     std::size_t i(0);
     for (const auto n : stack)
     {
-        EXPECT_EQ(n.val(), max - i - 1);
+        EXPECT_EQ(n, max - i - 1);
         ++i;
     }
 
     // Not actually changing the Stack values.
-    for (auto n : stack) { n.val() = 1; }
+    for (auto n : stack) n = 1;
 
     i = 0;
     for (const auto n : stack)
     {
-        EXPECT_EQ(n.val(), max - i - 1);
+        EXPECT_EQ(n, max - i - 1);
         ++i;
     }
 }
 
-TEST(UniqueSemantics, IterateEmpty)
+TEST(UniqueSemantics, RangeEmpty)
 {
     splicer::ObjectPool<int> pool(blockSize);
     splicer::ObjectPool<int>::UniqueStackType stack(pool);
@@ -287,7 +327,7 @@ TEST(UniqueSemantics, IterateEmpty)
     std::size_t i(0);
     for (const auto& n : stack)
     {
-        EXPECT_NE(n.val(), 12345);  // Get rid of unused variable warning.
+        EXPECT_NE(n, 12345);  // Get rid of unused variable warning.
         ++i;
     }
 
