@@ -226,6 +226,25 @@ TEST(UniqueSemantics, DefaultConstruct)
     EXPECT_EQ(pool.available(), pool.allocated());
 }
 
+TEST(UniqueSemantics, NodeConstruct)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::ObjectPool<int>::UniqueNodeType node(pool.acquireOne(42));
+
+    EXPECT_TRUE(node.get());
+    EXPECT_EQ(**node, 42);
+
+    splicer::ObjectPool<int>::UniqueStackType stack(std::move(node));
+
+    EXPECT_FALSE(node.get());
+    EXPECT_EQ(stack.size(), 1);
+
+    stack.reset();
+
+    EXPECT_EQ(stack.size(), 0);
+    EXPECT_EQ(pool.available(), pool.allocated());
+}
+
 TEST(UniqueSemantics, Iterate)
 {
     splicer::ObjectPool<int> pool(blockSize);

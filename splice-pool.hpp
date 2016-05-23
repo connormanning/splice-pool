@@ -281,7 +281,7 @@ public:
     using Iterator = typename Stack<T>::Iterator;
     using ConstIterator = typename Stack<T>::ConstIterator;
 
-    UniqueStack(SplicePool<T>& splicePool)
+    explicit UniqueStack(SplicePool<T>& splicePool)
         : m_splicePool(splicePool)
         , m_nodeDelete(&splicePool)
         , m_stack()
@@ -293,6 +293,14 @@ public:
         , m_stack(stack)
     {
         stack.clear();
+    }
+
+    explicit UniqueStack(typename SplicePool<T>::UniqueNodeType&& node)
+        : m_splicePool(node.get_deleter().pool())
+        , m_nodeDelete(&m_splicePool)
+        , m_stack()
+    {
+        push(std::move(node));
     }
 
     UniqueStack(UniqueStack&& other)
@@ -396,6 +404,16 @@ public:
         void operator()(NodeType* node)
         {
             if (m_splicePool) m_splicePool->release(node);
+        }
+
+        SplicePool& pool()
+        {
+            if (!m_splicePool)
+            {
+                throw std::runtime_error("No associated splice pool");
+            }
+
+            return *m_splicePool;
         }
 
     private:
