@@ -41,15 +41,10 @@ TEST(ObjectPool, ArrowOperator)
     splicer::ObjectPool<Type>::UniqueNodeType node(pool.acquireOne(42));
 
     // Unique access.
-    EXPECT_EQ((*node)->thing(), 42);
+    EXPECT_EQ(node->thing(), 42);
 
-    (*node)->thing() = 314;
-    EXPECT_EQ((*node)->thing(), 314);
-
-    // Referenced access.
-    splicer::Node<Type>& ref(*node);
-    EXPECT_EQ(ref->thing(), 314);
-    EXPECT_EQ(ref.val().thing(), ref->thing());
+    node->thing() = 314;
+    EXPECT_EQ(node->thing(), 314);
 
     // Released raw access.
     splicer::Node<Type>* raw(node.release());

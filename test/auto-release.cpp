@@ -14,13 +14,13 @@ TEST(UniqueSemantics, AutoReleaseNode)
     {
         splicer::ObjectPool<int>::UniqueNodeType node(pool.acquireOne(42));
         ASSERT_TRUE(node.get());
-        EXPECT_EQ(node->val(), 42);
-        EXPECT_EQ(**node, 42);  // Equivalent to above.
+        EXPECT_EQ(node.get()->val(), 42);
+        EXPECT_EQ(*node, 42);  // Equivalent to above.
 
-        **node = 271828;
+        *node = 271828;
 
-        EXPECT_EQ(node->val(), 271828);
-        EXPECT_EQ(**node, 271828);
+        EXPECT_EQ(node.get()->val(), 271828);
+        EXPECT_EQ(*node, 271828);
 
         EXPECT_GE(pool.allocated(), blockSize);
         EXPECT_EQ(pool.available(), pool.allocated() - 1);
@@ -32,7 +32,7 @@ TEST(UniqueSemantics, AutoReleaseNode)
         node = pool.acquireOne(314);
 
         ASSERT_TRUE(node.get());
-        EXPECT_EQ(node->val(), 314);
+        EXPECT_EQ(*node, 314);
 
         EXPECT_GE(pool.allocated(), blockSize);
         EXPECT_EQ(pool.available(), pool.allocated() - 1);
@@ -111,8 +111,8 @@ TEST(UniqueSemantics, Combinations)
         EXPECT_EQ(pool.available(), pool.allocated() - 2);
         ASSERT_TRUE(one.get());
         ASSERT_TRUE(two.get());
-        EXPECT_EQ(one->val(), 1);
-        EXPECT_EQ(two->val(), 2);
+        EXPECT_EQ(*one, 1);
+        EXPECT_EQ(*two, 2);
 
         splicer::ObjectPool<int>::UniqueStackType stack(pool);
         stack.push(std::move(one));
@@ -162,8 +162,8 @@ TEST(UniqueSemantics, ManualRelease)
         EXPECT_EQ(pool.available(), pool.allocated() - 2);
         ASSERT_TRUE(one.get());
         ASSERT_TRUE(two.get());
-        EXPECT_EQ(one->val(), 1);
-        EXPECT_EQ(two->val(), 2);
+        EXPECT_EQ(*one, 1);
+        EXPECT_EQ(*two, 2);
 
         pool.release(std::move(one));
 
@@ -209,17 +209,16 @@ TEST(UniqueSemantics, DefaultConstruct)
 
     // This node doesn't have a real deleter since it's not tied to a pool
     // instance.
-    splicer::ObjectPool<int>::UniqueNodeType node;
+    splicer::ObjectPool<int>::UniqueNodeType node(pool);
 
     EXPECT_FALSE(node.get());
     ASSERT_NO_THROW(node.reset());
 
-    // Reset the node with a real deleter.
     node = pool.acquireOne(42);
 
     EXPECT_EQ(pool.available(), pool.allocated() - 1);
     ASSERT_TRUE(node.get());
-    EXPECT_EQ(node->val(), 42);
+    EXPECT_EQ(*node, 42);
 
     node.reset();
 
@@ -232,7 +231,7 @@ TEST(UniqueSemantics, NodeConstruct)
     splicer::ObjectPool<int>::UniqueNodeType node(pool.acquireOne(42));
 
     EXPECT_TRUE(node.get());
-    EXPECT_EQ(**node, 42);
+    EXPECT_EQ(*node, 42);
 
     splicer::ObjectPool<int>::UniqueStackType stack(std::move(node));
 
