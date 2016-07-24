@@ -352,3 +352,37 @@ TEST(UniqueSemantics, RangeEmpty)
     EXPECT_EQ(i, 0);
 }
 
+TEST(UniqueSemantics, SortedNodes)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::ObjectPool<int>::UniqueStackType stack(pool);
+
+    for (std::size_t i(19); i <= 19; i -= 2)
+    {
+        stack.push(pool.acquireOne(i), std::less<int>());
+    }
+
+    for (std::size_t i(0); i < 20; i += 2)
+    {
+        stack.push(pool.acquireOne(i), std::less<int>());
+    }
+
+    for (std::size_t i(0); i < 10; ++i)
+    {
+        stack.push(pool.acquireOne(10), std::less<int>());
+    }
+
+    EXPECT_TRUE(stack.sortedBy(std::less<int>()));
+    EXPECT_EQ(stack.size(), 30);
+
+    std::size_t i(0);
+    for (const auto n : stack)
+    {
+        if (i < 10) ASSERT_EQ(n, i);
+        else if (i < 20) ASSERT_EQ(n, 10);
+        else ASSERT_EQ(n, i - 10);
+
+        ++i;
+    }
+}
+

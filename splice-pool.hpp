@@ -69,6 +69,7 @@ public:
     const T* operator->() const { return &m_val; }
 
     Node* next() { return m_next; }
+    const Node* next() const { return m_next; }
 
 private:
     void setNext(Node* node) { m_next = node; }
@@ -84,6 +85,37 @@ class Stack
 
 public:
     Stack() : m_tail(nullptr), m_head(nullptr), m_size(0) { }
+
+    Stack(const Stack& other)
+        : m_tail(other.m_tail)
+        , m_head(other.m_head)
+        , m_size(other.m_size)
+    { }
+
+    Stack& operator=(const Stack& other)
+    {
+        m_tail = other.m_tail;
+        m_head = other.m_head;
+        m_size = other.m_size;
+        return *this;
+    }
+
+    Stack(Stack&& other)
+        : m_tail(other.m_tail)
+        , m_head(other.m_head)
+        , m_size(other.m_size)
+    {
+        other.clear();
+    }
+
+    Stack& operator=(Stack&& other)
+    {
+        m_tail = other.m_tail;
+        m_head = other.m_head;
+        m_size = other.m_size;
+        other.clear();
+        return *this;
+    }
 
     void push(Node<T>* node)
     {
@@ -105,6 +137,131 @@ public:
             m_size += other.size() - 1; // Tail has already been accounted for.
             other.clear();
         }
+    }
+
+    template <typename Compare>
+    bool sortedBy(Compare compare)
+    {
+        Node<T>* node(m_head);
+
+        while (node)
+        {
+            if (node->next() && compare(**node->next(), **node))
+            {
+                return false;
+            }
+
+            node = node->next();
+        }
+
+        return true;
+    }
+
+    // Preconditions: this stack is sorted according to this comparator.
+    //
+    // This operation has complexity O(n), n being the stack size.
+    template <typename Compare>
+    void push(Node<T>* node, Compare compare)
+    {
+        assert(sortedBy(compare));
+
+        if (empty() || compare(**node, **m_head))
+        {
+            push(node);
+        }
+        else
+        {
+            Node<T>* before(m_head);
+
+            while (before->next() && compare(**before->next(), **node))
+            {
+                before = before->next();
+            }
+
+            node->setNext(before->next());
+            before->setNext(node);
+
+            ++m_size;
+        }
+    }
+
+    // Preconditions: both this stack, and the incoming stack, are sorted
+    // according to this comparator.
+    //
+    // This operation has complexity O(m * n), where m and n are the sizes of
+    // the stacks.  It is intended only for stacks known to be small.
+    template <typename Compare>
+    void push(Stack& other, Compare compare)
+    {
+        assert(sortedBy(compare));
+        assert(other.sortedBy(compare));
+
+        Node<T>* a(m_head);
+        Node<T>* b(other.head());
+
+        if (!a)
+        {
+            *this = other;
+            return;
+        }
+        else if (!b)
+        {
+            return;
+        }
+
+        // Insert whatever we can from B prior to the start of A.
+        if (compare(**b, **a))
+        {
+            while (b->next() && compare(**b->next(), **a))
+            {
+                b = b->next();
+            }
+
+            Node<T>* nextB(b->next());
+            b->setNext(m_head);
+            b = nextB;
+
+            m_head = other.head();
+        }
+
+        // At the top of this loop, the position of B needs to be inserted
+        // somewhere (but not necessarily immediately) after the position of A.
+        while (a && b)
+        {
+            assert(compare(**a, **b));
+
+            // First, progress A to the point at which B should be inserted
+            // immediately after A.
+            while (a->next() && compare(**a->next(), **b))
+            {
+                a = a->next();
+            }
+
+            // Then, insert the range starting with B, to the position ahead of
+            // B (e.g. B + n) such that compare(*(B + n), A.next()) == true.
+            Node<T>* nextA(a->next());
+            a->setNext(b);
+            a = nextA;
+
+            if (a)
+            {
+                // Splice the applicable range from B into A.
+                while (b->next() && compare(**b->next(), **a))
+                {
+                    b = b->next();
+                }
+
+                Node<T>* nextB(b->next());
+                b->setNext(a);
+                b = nextB;
+            }
+        }
+
+        // If B is at the end, then the insertion is complete.  Otherwise,
+        // the rest of B needs to be appended to our tail.
+        if (b) m_tail = other.tail();
+
+        m_size += other.size();
     }
 
     Node<T>* pop()
@@ -147,7 +304,7 @@ public:
     bool empty() const { return !m_head; }
     std::size_t size() const { return m_size; }
 
-    void print(std::size_t maxElements) const
+    void print(std::size_t maxElements = 20) const
     {
         if (Node<T>* current = m_head)
         {
@@ -269,6 +426,9 @@ protected:
     }
 
 private:
+    Node<T>* tail() { return m_tail; }
+    const Node<T>* tail() const { return m_tail; }
+
     Node<T>* m_tail;
     Node<T>* m_head;
     std::size_t m_size;
@@ -349,6 +509,7 @@ class UniqueStack
 public:
     using Iterator = typename Stack<T>::Iterator;
     using ConstIterator = typename Stack<T>::ConstIterator;
+    using NodeType = typename SplicePool<T>::NodeType;
     using UniqueNodeType = typename SplicePool<T>::UniqueNodeType;
 
     explicit UniqueStack(SplicePool<T>& splicePool)
@@ -404,6 +565,7 @@ public:
 
     void push(Node<T>* node) { m_stack.push(node); }
     void push(Stack<T>& other) { m_stack.push(other); }
+    void push(Stack<T>&& other) { m_stack.push(other); other.clear(); }
 
     void push(UniqueNodeType&& node)
     {
@@ -417,9 +579,61 @@ public:
         m_stack.push(pushing);
     }
 
+    template <typename Compare>
+    void push(Node<T>* node, Compare compare)
+    {
+        m_stack.push(node, compare);
+    }
+
+    template <typename Compare>
+    void push(Stack<T>& other, Compare compare)
+    {
+        m_stack.push(other, compare);
+    }
+
+    template <typename Compare>
+    void push(Stack<T>&& other, Compare compare)
+    {
+        m_stack.push(other, compare);
+        other.clear();
+    }
+
+    template <typename Compare>
+    void push(UniqueNodeType&& node, Compare compare)
+    {
+        Node<T>* pushing(node.release());
+        m_stack.push(pushing, compare);
+    }
+
+    template <typename Compare>
+    void push(UniqueStack&& other, Compare compare)
+    {
+        Stack<T> pushing(other.release());
+        m_stack.push(pushing, compare);
+    }
+
+    template <typename Compare>
+    bool sortedBy(Compare compare)
+    {
+        return m_stack.sortedBy(compare);
+    }
+
     UniqueNodeType popOne()
     {
         return UniqueNodeType(m_splicePool, m_stack.pop());
+    }
+
+    template<class... Args>
+    UniqueNodeType popOne(Args&&... args)
+    {
+        UniqueNodeType node(m_splicePool, m_stack.pop());
+
+        if (!std::is_pointer<T>::value)
+        {
+            node.get()->construct(std::forward<Args>(args)...);
+        }
+
+        return node;
     }
 
     UniqueStack pop(std::size_t count)
@@ -430,8 +644,12 @@ public:
 
     bool empty() const { return m_stack.empty(); }
     std::size_t size() const { return m_stack.size(); }
-    void print(std::size_t maxElements) const { m_stack.print(maxElements); }
     void swap(UniqueStack&& other) { m_stack.swap(other.m_stack); }
+
+    void print(std::size_t maxElements = 20) const
+    {
+        m_stack.print(maxElements);
+    }
 
     Node<T>* head() { return m_stack.head(); }
     const Node<T>* head() const { return m_stack.head(); }

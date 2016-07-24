@@ -14,7 +14,7 @@ namespace
 
         for (std::size_t i(0); i < values.size(); ++i)
         {
-            nodes[i].val() = values[i];
+            *nodes[i] = values[i];
         }
 
         return nodes;
@@ -54,7 +54,7 @@ TEST(Stack, PushPopNode)
     const int value(4);
 
     splicer::Node<int> node;
-    node.val() = value;
+    *node = value;
 
     EXPECT_TRUE(stack.empty());
 
@@ -64,7 +64,7 @@ TEST(Stack, PushPopNode)
 
     splicer::Node<int>* popped(stack.pop());
     ASSERT_TRUE(popped);
-    EXPECT_EQ(popped->val(), value);
+    EXPECT_EQ(**popped, value);
     EXPECT_FALSE(popped->next());
     EXPECT_TRUE(stack.empty());
 }
@@ -411,5 +411,206 @@ TEST(Stack, RangeEmpty)
     }
 
     EXPECT_EQ(i, 0);
+}
+
+TEST(Stack, SortedNodes)
+{
+    std::vector<splicer::Node<int>> nodes(20);
+
+    for (std::size_t i(0); i < nodes.size(); ++i) *nodes[i] = i + 1;
+
+    {
+        splicer::Stack<int> stack;
+
+        // Pushing in ascending order, so stack.head() will be 20.
+        for (auto& n : nodes) stack.push(&n);
+
+        EXPECT_EQ(stack.size(), nodes.size());
+        EXPECT_TRUE(stack.sortedBy(std::greater<int>()));
+
+        std::size_t i(20);
+        for (const auto& v : stack) ASSERT_EQ(v, i--);
+    }
+
+    {
+        splicer::Stack<int> stack;
+
+        // Push with comparator std::less, so stack.head() will be 1.
+        for (auto& n : nodes) stack.push(&n, std::less<int>());
+
+        EXPECT_EQ(stack.size(), nodes.size());
+        EXPECT_TRUE(stack.sortedBy(std::less<int>()));
+
+        std::size_t i(0);
+        for (const auto& v : stack) ASSERT_EQ(v, ++i);
+    }
+
+    {
+        splicer::Stack<int> stack;
+
+        // Pushing in ascending order, so stack.head() will be 20.
+        for (auto& n : nodes) stack.push(&n, [](int a, int b)
+        {
+            return a > b;
+        });
+
+        EXPECT_EQ(stack.size(), nodes.size());
+        EXPECT_TRUE(stack.sortedBy(std::greater<int>()));
+
+        std::size_t i(20);
+        for (const auto& v : stack) ASSERT_EQ(v, i--);
+    }
+}
+
+TEST(Stack, SortedStacks)
+{
+    std::vector<splicer::Node<int>> nodes(20);
+
+    for (std::size_t i(0); i < nodes.size(); ++i) *nodes[i] = i + 1;
+
+    {
+        splicer::Stack<int> a;
+        splicer::Stack<int> b;
+
+        // Pushing in ascending order, so .head() will be 10 and 20.
+        for (auto& n : nodes)
+        {
+            if (*n <= 10) a.push(&n);
+            else b.push(&n);
+        }
+
+        ASSERT_TRUE(a.sortedBy(std::greater<int>()));
+        ASSERT_TRUE(b.sortedBy(std::greater<int>()));
+
+        a.push(b, std::greater<int>());
+
+        ASSERT_EQ(a.size(), nodes.size());
+        ASSERT_TRUE(a.sortedBy(std::greater<int>()));
+
+        std::size_t i(20);
+        for (const auto& v : a) ASSERT_EQ(v, i--);
+    }
+
+    {
+        splicer::Stack<int> a;
+        splicer::Stack<int> b;
+
+        // Push such that the nodes will interleave, with a.head() < b.head().
+        for (auto& n : nodes)
+        {
+            if (*n % 2) a.push(&n, std::less<int>());
+            else b.push(&n, std::less<int>());
+        }
+
+        ASSERT_EQ(a.size(), 10);
+        ASSERT_EQ(b.size(), 10);
+        ASSERT_TRUE(a.sortedBy(std::less<int>()));
+        ASSERT_TRUE(b.sortedBy(std::less<int>()));
+
+        a.push(b, std::less<int>());
+
+        ASSERT_EQ(a.size(), nodes.size());
+        ASSERT_TRUE(a.sortedBy(std::less<int>()));
+
+        std::size_t i(0);
+        for (const auto& v : a) ASSERT_EQ(v, ++i);
+    }
+
+    {
+        splicer::Stack<int> a;
+        splicer::Stack<int> b;
+
+        // Same as before, but now with b.head() < a.head().
+        for (auto& n : nodes)
+        {
+            if (*n % 2) b.push(&n, std::less<int>());
+            else a.push(&n, std::less<int>());
+        }
+
+        ASSERT_EQ(a.size(), 10);
+        ASSERT_EQ(b.size(), 10);
+        ASSERT_TRUE(a.sortedBy(std::less<int>()));
+        ASSERT_TRUE(b.sortedBy(std::less<int>()));
+
+        a.push(b, std::less<int>());
+
+        ASSERT_EQ(a.size(), nodes.size());
+        ASSERT_TRUE(a.sortedBy(std::less<int>()));
+
+        std::size_t i(0);
+        for (const auto& v : a) ASSERT_EQ(v, ++i);
+    }
+}
+
+TEST(Stack, SortedStacksEqualRange)
+{
+    std::vector<splicer::Node<int>> nodes(40);
+
+    for (std::size_t i(0); i < nodes.size(); ++i) *nodes[i] = i % 20 + 1;
+
+    splicer::Stack<int> a;
+    splicer::Stack<int> b;
+
+    for (auto& n : nodes)
+    {
+        if (*n % 2) a.push(&n, std::less<int>());
+        else b.push(&n, std::less<int>());
+    }
+
+    ASSERT_EQ(a.size(), 20);
+    ASSERT_EQ(b.size(), 20);
+    ASSERT_TRUE(a.sortedBy(std::less<int>()));
+    ASSERT_TRUE(b.sortedBy(std::less<int>()));
+
+    a.push(b, std::less<int>());
+
+    ASSERT_EQ(a.size(), nodes.size());
+    ASSERT_TRUE(a.sortedBy(std::less<int>()));
+
+    std::size_t i(0);
+    for (const auto& v : a) ASSERT_EQ(v, i++ / 2 * 2 / 2 + 1);
+}
+
+TEST(Stack, SortedStacksEmpty)
+{
+    std::vector<splicer::Node<int>> nodes(makeNodes());
+    std::sort(
+            nodes.begin(),
+            nodes.end(),
+            [](const splicer::Node<int>& a, const splicer::Node<int>& b)
+            {
+                // Sort by >, they'll be inserted in reverse order.
+                return *a > *b;
+            });
+
+    {
+        splicer::Stack<int> a;
+        splicer::Stack<int> b(makeStack(nodes));
+
+        ASSERT_TRUE(b.sortedBy(std::less<int>()));
+
+        a.push(b, std::less<int>());
+
+        std::size_t i(0);
+        for (const auto& n : a)
+        {
+            ASSERT_EQ(n, *nodes.at(nodes.size() - i++ - 1));
+        }
+    }
+
+    {
+        splicer::Stack<int> a;
+        splicer::Stack<int> b(makeStack(nodes));
+
+        ASSERT_TRUE(b.sortedBy(std::less<int>()));
+
+        b.push(a, std::less<int>());
+
+        std::size_t i(0);
+        for (const auto& n : b)
+        {
+            ASSERT_EQ(n, *nodes.at(nodes.size() - i++ - 1));
+        }
+    }
 }
 
