@@ -571,6 +571,35 @@ TEST(Stack, SortedStacksEqualRange)
     for (const auto& v : a) ASSERT_EQ(v, i++ / 2 * 2 / 2 + 1);
 }
 
+TEST(Stack, SortedStacksEqualValues)
+{
+    std::vector<splicer::Node<int>> nodes(40);
+
+    for (std::size_t i(0); i < nodes.size(); ++i) *nodes[i] = i / 2;
+
+    splicer::Stack<int> a;
+    splicer::Stack<int> b;
+
+    for (auto& n : nodes)
+    {
+        if (*n % 2) a.push(&n, std::less<int>());
+        else b.push(&n, std::less<int>());
+    }
+
+    ASSERT_EQ(a.size(), 20);
+    ASSERT_EQ(b.size(), 20);
+    ASSERT_TRUE(a.sortedBy(std::less<int>()));
+    ASSERT_TRUE(b.sortedBy(std::less<int>()));
+
+    a.push(b, std::less<int>());
+
+    ASSERT_EQ(a.size(), nodes.size());
+    ASSERT_TRUE(a.sortedBy(std::less<int>()));
+
+    std::size_t i(0);
+    for (const auto& v : a) ASSERT_EQ(v, i++ / 2);
+}
+
 TEST(Stack, SortedStacksEmpty)
 {
     std::vector<splicer::Node<int>> nodes(makeNodes());
