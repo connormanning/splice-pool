@@ -386,3 +386,32 @@ TEST(UniqueSemantics, SortedNodes)
     }
 }
 
+TEST(UniqueSemantics, PushBack)
+{
+    splicer::ObjectPool<int> pool(blockSize);
+    splicer::ObjectPool<int>::UniqueStackType stack(pool);
+    splicer::ObjectPool<int>::UniqueStackType other(pool);
+
+    for (std::size_t i(0); i < 20; ++i)
+    {
+        if (i < 10) stack.pushBack(pool.acquireOne(i));
+        else other.pushBack(pool.acquireOne(i));
+    }
+
+    EXPECT_EQ(stack.size(), 10);
+    EXPECT_EQ(other.size(), 10);
+
+    std::size_t i(0);
+    for (const auto n : stack) ASSERT_EQ(n, i++);
+    for (const auto n : other) ASSERT_EQ(n, i++);
+
+    stack.pushBack(std::move(other));
+
+    EXPECT_EQ(stack.size(), 20);
+    EXPECT_EQ(other.size(), 0);
+    EXPECT_TRUE(other.empty());
+
+    i = 0;
+    for (const auto n : stack) ASSERT_EQ(n, i++);
+}
+

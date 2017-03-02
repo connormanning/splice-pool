@@ -8,13 +8,13 @@ namespace
 {
     const std::vector<int> values{3, 1, 4, 1, 5, 9};
 
-    std::vector<splicer::Node<int>> makeNodes()
+    std::vector<splicer::Node<int>> makeNodes(std::vector<int> v = values)
     {
-        std::vector<splicer::Node<int>> nodes(values.size());
+        std::vector<splicer::Node<int>> nodes(v.size());
 
-        for (std::size_t i(0); i < values.size(); ++i)
+        for (std::size_t i(0); i < v.size(); ++i)
         {
-            *nodes[i] = values[i];
+            *nodes[i] = v[i];
         }
 
         return nodes;
@@ -67,6 +67,53 @@ TEST(Stack, PushPopNode)
     EXPECT_EQ(**popped, value);
     EXPECT_FALSE(popped->next());
     EXPECT_TRUE(stack.empty());
+}
+
+TEST(Stack, PushBack)
+{
+    std::vector<splicer::Node<int>> nodes(
+            makeNodes(std::vector<int>{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }));
+
+    splicer::Stack<int> stack;
+    splicer::Stack<int> other;
+
+    std::size_t i(0);
+    for (auto& node : nodes)
+    {
+        if (i < nodes.size() / 2) stack.pushBack(&node);
+        else other.pushBack(&node);
+
+        ++i;
+    }
+
+    i = 0;
+    EXPECT_EQ(stack.size(), 5);
+    EXPECT_EQ(other.size(), 5);
+
+    for (const int v : stack)
+    {
+        ASSERT_EQ(v, i);
+        ++i;
+    }
+
+    for (const int v : other)
+    {
+        ASSERT_EQ(v, i);
+        ++i;
+    }
+
+    stack.pushBack(other);
+
+    i = 0;
+    EXPECT_EQ(stack.size(), 10);
+    EXPECT_EQ(other.size(), 0);
+    EXPECT_TRUE(other.empty());
+
+    for (const int v : stack)
+    {
+        ASSERT_EQ(v, i);
+        ++i;
+    }
 }
 
 TEST(Stack, Swap)
